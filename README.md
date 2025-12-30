@@ -19,11 +19,11 @@
 
 ## ***🚀 Overview***
 
-### **ComfyUI-Wan22Blockswap is a powerful ComfyUI node that implements advanced VRAM optimization**
+### **ComfyUI-Wan22Blockswap is a powerful ComfyUI node that implements advanced VRAM**
 
-### **techniques for WAN 2.1/2.2 models. It uses a sophisticated lazy loading strategy to prevent VRAM spikes**
+### **optimization techniques for WAN 2.1/2.2 models. It uses a sophisticated lazy loading**
 
-### **during model loading while maintaining optimal performance.**
+### **strategy to prevent VRAM spikes during model loading while maintaining optimal performance.**
 
     
 ## Key Features
