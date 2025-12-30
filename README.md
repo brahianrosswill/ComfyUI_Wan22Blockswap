@@ -1,23 +1,30 @@
-#                                  ComfyUI-Wan22Blockswap
+#                                    ComfyUI-Wan22Blockswap
  
 
-                                                ***MID DEVELOPMENT, EXPECT BUGS AND WEIRD THINGS TO HAPPEN.***
+                                                    ***MID DEVELOPMENT, EXPECT BUGS AND WEIRD THINGS TO HAPPEN.***
 
-                                   ***IF THEY HAPPEN, PLEASE CREATE AN ISSUE WITH THE TRACEBACK, THANKS!***  😊~
+                                       ***IF THEY HAPPEN, PLEASE CREATE AN ISSUE WITH THE TRACEBACK, THANKS!***  😊~
 
 
  
 
-              **Advanced VRAM Optimization for WAN 2.1/2.2 Models with Lazy Loading and GGUF Support**
+                  **Advanced VRAM Optimization for WAN 2.1/2.2 Models with Lazy Loading and GGUF Support**
 
-                                                                                          [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+                                                                                              [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-brightgreen.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 
+
+
 ## 🚀 Overview
 
-ComfyUI-Wan22Blockswap is a powerful ComfyUI node that implements advanced VRAM optimization techniques for WAN 2.1/2.2 models. It uses a sophisticated lazy loading strategy to prevent VRAM spikes during model loading while maintaining optimal performance.
+**ComfyUI-Wan22Blockswap is a powerful ComfyUI node that implements advanced VRAM optimization techniques**
 
+**for WAN 2.1/2.2 models. It uses a sophisticated lazy loading strategy to prevent VRAM spikes during model**
+
+**loading while maintaining optimal performance.**
+
+    
 ### Key Features
 
 -   **Lazy Loading**: Blocks are loaded directly to their target device, preventing massive VRAM spikes
