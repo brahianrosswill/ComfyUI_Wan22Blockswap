@@ -317,7 +317,7 @@ This project builds upon the excellent work of the following projects and commun
 If you encounter issues or have questions:
 
 1. Check the [FAQ](#faq) section below
-2. Search existing [Issues](https://github.com/yourusername/ComfyUI-Wan22Blockswap/issues)
+2. Search existing [Issues](https://github.com/crmbz0r/ComfyUI-Wan22Blockswap/issues)
 3. Create a new issue with detailed information
 4. Join our Discord community (link in repository)
 
@@ -341,12 +341,13 @@ If you encounter issues or have questions:
 
 ## 🔄 Changelog
 
-### v1.0.0 (Current)
+### v0.0.1 (Current)
 
 -   Initial release with full lazy loading support
 -   GGUF model compatibility
 -   VACE model support
 -   Comprehensive debug logging
 -   Modular architecture
+-   WanVideoLooper support (hopefully bug-free)
 
 ---
