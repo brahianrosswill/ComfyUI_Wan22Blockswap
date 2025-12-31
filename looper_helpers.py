@@ -94,14 +94,14 @@ def prepare_model_for_loop(
 
     # Check if we should skip preparation (already prepared with same config)
     if session_id and tracker_singleton.should_skip_preparation(
-        model_id, session_id, blocks_to_swap, patches_uuid
+        model, loop_index, session_id
     ):
         if block_swap_debug:
             print(f"[BlockSwap] Loop {loop_index+1}: Model already prepared, skipping")
         # Increment reference count for this loop
         try:
-            tracker_singleton.increment_reference_count(model_id, session_id)
-        except (KeyError, ValueError):
+            tracker_singleton.increment_ref(model)
+        except (KeyError, ValueError, AttributeError):
             pass  # Model may not be registered yet
         return model  # Return original, not clone
 
@@ -119,14 +119,12 @@ def prepare_model_for_loop(
 
     # Register model with tracker if session provided
     if session_id:
-        # Use the cloned model's id since that's what will be used
-        clone_model_id = id(model_copy.model)
         try:
             tracker_singleton.register_model(
-                model_id=clone_model_id,
+                model=model_copy,
+                loop_index=loop_index,
                 session_id=session_id,
                 blocks_to_swap=blocks_to_swap,
-                patches_uuid=patches_uuid,
             )
             if block_swap_debug:
                 print(f"[BlockSwap] Loop {loop_index+1}: Model registered with tracker")
@@ -135,7 +133,7 @@ def prepare_model_for_loop(
                 print(f"[BlockSwap] Loop {loop_index+1}: Tracker registration warning: {e}")
 
     # Create a fresh BlockSwapTracker for this loop iteration
-    tracker = create_fresh_blockswap_tracker(blocks_to_swap)
+    tracker = create_fresh_blockswap_tracker(blocks_to_swap, block_swap_debug)
 
     # Store session_id in tracker for cleanup callback access
     tracker.session_id = session_id
@@ -180,7 +178,10 @@ def prepare_model_for_loop(
     return model_copy
 
 
-def create_fresh_blockswap_tracker(blocks_to_swap: int) -> BlockSwapTracker:
+def create_fresh_blockswap_tracker(
+    blocks_to_swap: int,
+    block_swap_debug: bool = False,
+) -> BlockSwapTracker:
     """
     Create a fresh BlockSwapTracker instance configured for a new loop iteration.
 
@@ -189,6 +190,7 @@ def create_fresh_blockswap_tracker(blocks_to_swap: int) -> BlockSwapTracker:
 
     Args:
         blocks_to_swap (int): Number of transformer blocks to swap to CPU
+        block_swap_debug (bool): Enable debug logging
 
     Returns:
         BlockSwapTracker: A fresh tracker instance with all state initialized
@@ -198,6 +200,7 @@ def create_fresh_blockswap_tracker(blocks_to_swap: int) -> BlockSwapTracker:
 
     # Configure the tracker for this loop
     tracker.blocks_to_swap = blocks_to_swap
+    tracker.block_swap_debug = block_swap_debug
 
     # Initialize all collections as empty
     tracker.swapped_indices = []
@@ -245,7 +248,6 @@ def cleanup_loop_blockswap(
     try:
         # Get tracker for smart cleanup decisions
         tracker_singleton = BlockSwapModelTracker.get_instance()
-        model_id = id(model.model)
 
         # Get session_id from tracking if not provided
         tracking = model.attachments.get('blockswap_tracking')
@@ -254,7 +256,7 @@ def cleanup_loop_blockswap(
 
         # Check with tracker for cleanup decision
         if session_id:
-            decision = tracker_singleton.get_cleanup_decision(model_id, session_id)
+            decision = tracker_singleton.get_cleanup_decision(model)
 
             if decision == CleanupDecision.SKIP:
                 if block_swap_debug:
@@ -571,10 +573,7 @@ def start_blockswap_session(
     tracker = BlockSwapModelTracker.get_instance()
     tracker.set_debug(block_swap_debug)
 
-    session_id = tracker.start_session(
-        loop_count=loop_count,
-        cleanup_mode=cleanup_mode,
-    )
+    session_id = tracker.start_session(expected_loops=loop_count)
 
     if block_swap_debug:
         print(f"[BlockSwap] Started session {session_id} for {loop_count} loops")
@@ -627,9 +626,11 @@ def update_session_loop_state(
     """
     tracker = BlockSwapModelTracker.get_instance()
 
-    if not completed:
-        tracker.update_session_loop(session_id, loop_index)
-    else:
-        tracker.mark_loop_completed(session_id, loop_index)
+    # Use the available method - update_loop_progress
+    tracker.update_loop_progress(session_id, loop_index)
+    
+    if completed:
+        # Mark session as complete if this is marked as the final loop
+        tracker.mark_session_complete(session_id)
         if block_swap_debug:
             print(f"[BlockSwap] Session {session_id} completed loop {loop_index + 1}")
