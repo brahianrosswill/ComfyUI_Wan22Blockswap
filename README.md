@@ -1,11 +1,9 @@
-#                                      ComfyUI-Wan22Blockswap
+#                                       ComfyUI-Wan22Blockswap
  
   
-                                            ***MID DEVELOPMENT, EXPECT BUGS AND WEIRD THINGS TO HAPPEN.***
+                                             ***MID DEVELOPMENT, EXPECT BUGS AND WEIRD THINGS TO HAPPEN.***
 
-                                   ***IF THEY HAPPEN, PLEASE CREATE AN ISSUE WITH THE TRACEBACK, THANKS!***  😊~
-
-
+                                     ***IF THEY HAPPEN, PLEASE CREATE AN ISSUE WITH THE TRACEBACK, THANKS!***  😊~               
  
 ### **Advanced VRAM Optimization for WAN 2.1/2 with Lazy Loading and GGUF Support**
 
@@ -13,9 +11,15 @@
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-brightgreen.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 
-         
+      
+      
+> [!CAUTION]
+>                    ***__!! THE "WAN BlockSwap Model Loader" MODEL LOADER NODE SHOULD NOT BE USED YET !!__***
+>                      
+>                                          ***IT IS STILL VERY EXPERIMENTAL AND WILL MOST LIKELY FLOOD YOUR VRAM***
 
 
+      
 
 ## ***🚀 Overview***
 
