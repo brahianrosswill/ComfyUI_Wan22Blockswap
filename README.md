@@ -48,6 +48,7 @@
 ## 📋 Table of Contents
 
 -   [🛠️ Installation](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8F-installation)
+-   [📦 Available Nodes](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8Favailable-nodes)
 -   [🎯 Usage](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-usage)
 -   [⚙️ Parameters](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8F-parameters)
 -   [📊 Performance](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-performance)
