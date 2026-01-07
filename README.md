@@ -19,6 +19,7 @@
 >                                          ***IT IS STILL VERY EXPERIMENTAL AND WILL MOST LIKELY FLOOD YOUR VRAM***
 >
 >                                          ***THE BLOCK SWAPPING ONLY WORKS WITH GGUF MODELS CURRENTLY***
+> 
 >                                          ***THE WAN MODEL LOADER ALSO ONLY WORKS WITH GGUF MODELS ATM***
 
 
