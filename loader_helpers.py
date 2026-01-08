@@ -269,10 +269,14 @@ def assign_weights_with_routing(
     progress_interval = max(1, total_keys // 10)
     loaded_count = 0
     skipped_count = 0
+    skipped_keys = []  # Track first few skipped keys for debugging
     
     # NOTE: We cannot use model.state_dict() for checking key existence when using GGMLOps
     # because GGMLOps.Linear sets self.weight = None, which doesn't appear in state_dict.
     # Instead, we navigate to each module directly and check if the attribute exists.
+    
+    logger.info(f"Starting weight assignment: {total_keys} keys to process")
+    logger.info(f"Blocks to GPU: 0-{swap_threshold-1}, Blocks to CPU: {swap_threshold}-{total_blocks-1}")
     
     for idx, (key, value) in enumerate(state_dict.items()):
         # Log progress periodically
@@ -284,10 +288,21 @@ def assign_weights_with_routing(
         if key_prefix and key.startswith(key_prefix):
             clean_key = key[len(key_prefix):]
         
-        # Check if module path exists by navigating to it
-        if not _module_path_exists(model, clean_key):
-            if skipped_count < 10:  # Only log first 10 to avoid spam
-                logger.debug(f"Skipping key not in model: {clean_key}")
+        # Try to set the module tensor - if it fails, the path doesn't exist
+        # This is more reliable than _module_path_exists for GGMLOps modules
+        try:
+            # Test navigation first
+            parts = clean_key.split(".")
+            test_module = model
+            for part in parts[:-1]:
+                if part.isdigit():
+                    test_module = test_module[int(part)]
+                else:
+                    test_module = getattr(test_module, part)
+            # If we get here, path exists
+        except (AttributeError, IndexError, KeyError, TypeError) as e:
+            if len(skipped_keys) < 20:  # Store first 20 for debugging
+                skipped_keys.append((clean_key, str(e)))
             skipped_count += 1
             continue
         
@@ -334,11 +349,21 @@ def assign_weights_with_routing(
             tensor = value.to(device=target_device)
         
         # Assign to model using set_module_tensor_to_device pattern
-        _set_module_tensor(model, clean_key, tensor)
-        loaded_count += 1
+        try:
+            _set_module_tensor(model, clean_key, tensor)
+            loaded_count += 1
+        except Exception as e:
+            logger.error(f"Failed to assign weight for key '{clean_key}': {e}")
+            if len(skipped_keys) < 20:
+                skipped_keys.append((clean_key, str(e)))
+            skipped_count += 1
     
     if skipped_count > 0:
         logger.warning(f"Skipped {skipped_count} keys not found in model (may indicate key mismatch)")
+        if skipped_keys:
+            logger.warning("First skipped keys:")
+            for key, error in skipped_keys[:10]:
+                logger.warning(f"  {key}: {error}")
     
     logger.info(
         f"Weight assignment complete: {loaded_count}/{total_keys} tensors loaded. "
@@ -363,15 +388,22 @@ def _materialize_meta_tensors(
     in the state_dict and remain as meta tensors after weight assignment.
     This function creates real tensors for them.
     
+    Also checks for None weights (GGMLOps.Linear can have weight=None if not loaded).
+    
     Args:
         model: Model to check
         main_device: Primary device (GPU)
         fallback_device: Fallback device (CPU)
     """
     meta_count = 0
+    none_count = 0
     
+    # Check parameters
     for name, param in model.named_parameters():
-        if param.device.type == "meta":
+        if param is None:
+            logger.error(f"Parameter is None: {name} - this should not happen!")
+            none_count += 1
+        elif param.device.type == "meta":
             # Create a real tensor on the fallback device
             logger.warning(f"Meta parameter found: {name}, materializing on {fallback_device}")
             new_param = nn.Parameter(
@@ -382,16 +414,31 @@ def _materialize_meta_tensors(
             _set_module_tensor(model, name, new_param)
             meta_count += 1
     
+    # Check buffers
     for name, buffer in model.named_buffers():
-        if buffer.device.type == "meta":
+        if buffer is None:
+            logger.warning(f"Buffer is None: {name}, creating zero buffer on {fallback_device}")
+            # We can't easily determine the shape, so skip
+            none_count += 1
+        elif buffer.device.type == "meta":
             # Create a real tensor on the fallback device
             logger.warning(f"Meta buffer found: {name}, materializing on {fallback_device}")
             new_buffer = torch.zeros(buffer.shape, dtype=buffer.dtype, device=fallback_device)
             _set_module_tensor(model, name, new_buffer)
             meta_count += 1
     
+    # Check for None weights in Linear modules (GGMLOps.Linear issue)
+    for name, module in model.named_modules():
+        if hasattr(module, 'weight') and module.weight is None:
+            # This is a problem - weight should have been loaded
+            logger.error(f"Module {name} has weight=None after loading! This will cause errors.")
+            none_count += 1
+    
     if meta_count > 0:
         logger.warning(f"Materialized {meta_count} meta tensors to {fallback_device}")
+    
+    if none_count > 0:
+        logger.error(f"Found {none_count} None weights/params - model may not work correctly!")
 
 
 def _set_module_tensor(
@@ -473,7 +520,14 @@ def create_model_skeleton(
     from comfy.ldm.wan.model import WanModel, WanAttentionBlock, VaceWanAttentionBlock
     
     variant = wan_config.get("model_variant", "t2v")
-    wan_version = wan_config.get("wan_version", "2.1")
+    wan_version = wan_config.get("wan_version")
+    
+    # If version is None, default to 2.2 (safer for modern models)
+    if wan_version is None:
+        logger.warning("wan_version is None in config! Defaulting to '2.2'")
+        wan_version = "2.2"
+    
+    logger.info(f"create_model_skeleton: variant={variant}, wan_version={wan_version}")
     
     # Determine block class based on variant
     if variant == "vace":

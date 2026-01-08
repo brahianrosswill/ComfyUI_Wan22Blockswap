@@ -1,509 +1,322 @@
-#                                       ComfyUI-Wan22Blockswap
+# ComfyUI-Wan22Blockswap
 
-> [!IMPORTANT]
-> ***SEEMS LIKE THE CORE SAMPLING AND MODEL LOADING OF COMFYUI IS A PAIN IN THE ASS AND DOESNT LIKE EXTERNAL BLOCK SWAPPING... IT DOESNT REALLY WANT TO WORK AS INTENDED, BUT I AM NOT GIVING UP 😤😮‍💨***
+### **VRAM Optimization for WAN 2.1/2.2 with BlockSwap Forward Patching**
 
-
-  
-                                             ***MID DEVELOPMENT, EXPECT BUGS AND WEIRD THINGS TO HAPPEN.***
-
-                                     ***IF THEY HAPPEN, PLEASE CREATE AN ISSUE WITH THE TRACEBACK, THANKS!***  😊~               
- 
-### **Advanced VRAM Optimization for WAN 2.1/2 with Lazy Loading and GGUF Support**
-
-                                                                                                   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-brightgreen.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 
-      
-      
-> [!CAUTION]
->                    ***__!! THE "WAN BlockSwap Model Loader" MODEL LOADER NODE SHOULD NOT BE USED YET !!__***
->                      
->                                          ***IT IS STILL VERY EXPERIMENTAL AND WILL MOST LIKELY FLOOD YOUR VRAM***
->
->                                          ***THE BLOCK SWAPPING ONLY WORKS WITH GGUF MODELS CURRENTLY***
-> 
->                                          ***THE WAN MODEL LOADER ALSO ONLY WORKS WITH GGUF MODELS ATM***
+---
 
+## 🚀 Overview
 
+**ComfyUI-Wan22Blockswap** enables running WAN 2.1/2.2 14B GGUF models on 12GB VRAM GPUs by dynamically swapping transformer blocks between GPU and CPU during inference.
 
-      
+### Key Features
 
-## ***🚀 Overview***
+- ✅ **Forward Patching**: Patches model's forward method to swap blocks during inference
+- ✅ **GGUF Lazy Loading**: Loads blocks directly to target device (prevents VRAM spikes)
+- ✅ **Combo Patcher**: Automatic HIGH→LOW model switching for guidance distillation workflows
+- ✅ **ON_CLEANUP Callbacks**: Automatic model switching when sampling completes
+- ✅ **WanVideoLooper Compatible**: Works with multi-loop video generation
+- ✅ **Full Cleanup Node**: Aggressive memory cleanup at end of workflow
 
-### **ComfyUI-Wan22Blockswap is a powerful ComfyUI node that implements advanced VRAM**
-
-### **optimization techniques for WAN 2.1/2.2 models. It uses a sophisticated lazy loading**
-
-### **strategy to prevent VRAM spikes at model loading while maintaining optimal performance.**
-
-    
-## Key Features
-
--   **Lazy Loading**: Blocks are loaded directly to their target device, preventing massive VRAM spikes
--   **GGUF Compatible**: Automatically detects and handles GGUF quantized models with best-effort swapping
--   **Multi-Model Support**: Works with all WAN model variants (1.3B, 5B, 14B, LongCat)
--   **WanVideoLooper Integration**: Full support for multi-loop video generation workflows
--   **VACE Integration**: Optional support for VACE model block swapping for multi-modal tasks
--   **Smart Memory Management**: Automatic cleanup and memory optimization
--   **Debug Support**: Comprehensive logging and performance monitoring
-
-          
-        
-
-## 📋 Table of Contents
-
--   [🛠️ Installation](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8F-installation)
--   [📦 Available Nodes](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8Favailable-nodes)
--   [🎯 Usage](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-usage)
--   [⚙️ Parameters](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8F-parameters)
--   [📊 Performance](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-performance)
--   [🔧 Compatibility](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-compatibility)
--   [🏗️ Architecture](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#%EF%B8%8F-architecture)
--   [🤝 Contributing](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-contributing)
--   [📝 License](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap#-license)
-
-        
-
-## 🛠️ Installation
-
-### Method 1: Manual Installation
-
-1. Download the latest release from the [Releases page](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap/releases)
-2. Extract the contents to your ComfyUI custom nodes directory:
-    ```
-    ComfyUI/custom_nodes/ComfyUI-wan22Blockswap/
-    ```
-3. Restart ComfyUI
-
-### Method 2: Git Installation
-
-```bash
-cd ComfyUI/custom_nodes
-git clone https://github.com/yourusername/ComfyUI-Wan22Blockswap.git
-```
-
-### Method 3: Manager Installation
-
-If you're using ComfyUI Manager, search for "Wan22Blockswap" in the available nodes list and install directly.
-
-        
+---
 
 ## 📦 Available Nodes
 
-This extension provides **5 nodes** organized by purpose:
+### Active Nodes (6 total)
 
-### 1. WAN Model Loader ✅ **(Recommended for simple workflows)**
-
-**Category:** `WAN`
-
-A simple all-in-one WAN model loader. Loads WAN 2.1/2.2 models in safetensors or GGUF format with automatic configuration detection. No BlockSwap - just pure model loading.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| `model_type` | Combo | Choose between "safetensors" or "gguf" format |
-| `safetensors_model` | Combo | Select safetensors model from diffusion_models folder |
-| `gguf_model` | Combo | Select GGUF model from diffusion_models folder |
-| `wan_version` | Combo | "auto", "2.1", or "2.2" (auto-detects from weights) |
-| `model_variant` | Combo | "auto", "t2v", "i2v", "vace", "camera", "s2v", "humo", "animate" |
-| `fp8_optimization` | Combo | FP8 quantization: "disabled", "e4m3fn", "e5m2" |
-| `weight_dtype` | Combo | Weight dtype: "auto", "fp16", "bf16", "fp32" |
-
-> **Note:** When using GGUF models, `fp8_optimization` and `weight_dtype` have no effect (GGUF models have their own quantization).
-
-**Output:** Connect to a **WAN 2.2 BlockSwap** node for VRAM optimization.
+| Node | Description |
+|------|-------------|
+| **WAN Model Loader** | Simple WAN model loader (no BlockSwap) - use with GGUF loaders |
+| **WAN 2.2 BlockSwap Patcher** | Apply BlockSwap to any single loaded model |
+| **WAN 2.2 BlockSwap Combo Patcher** | Apply BlockSwap to HIGH+LOW model pair with automatic switching |
+| **WAN 2.2 BlockSwap Cleanup** | Clean up BlockSwap state after sampling |
+| **WAN 2.2 BlockSwap Reposition** | Re-position blocks for next sampling run |
+| **WAN 2.2 Full Cleanup (End)** | Aggressive cleanup at end of workflow (like "Free Model and Node Cache") |
 
 ---
 
-### 2. WAN 2.2 BlockSwap ✅ **(Main BlockSwap node)**
+## 🎯 Quick Start
 
-**Category:** `ComfyUI_Wan22Blockswap`
+### Recommended Workflow: Combo Patcher
 
-Apply LAZY LOADING block swapping to WAN 2.1/2.2 models. Blocks are offloaded DURING loading to prevent VRAM spikes. This is the main node for VRAM optimization.
+For guidance distillation workflows (HIGH noise → LOW noise models):
 
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model` | MODEL | - | ComfyUI native WAN model (connect from any loader) |
-| `blocks_to_swap` | INT | 20 | Number of transformer blocks to swap to CPU |
-| `offload_txt_emb` | BOOLEAN | False | Offload text embeddings to CPU (~500MB savings) |
-| `offload_img_emb` | BOOLEAN | False | Offload image embeddings to CPU (~200MB savings) |
-| `use_non_blocking` | BOOLEAN | False | Use non-blocking memory transfers (faster) |
-| `vace_blocks_to_swap` | INT | 0 | VACE blocks to swap (0=auto detection) |
-| `prefetch_blocks` | INT | 0 | Prefetch N blocks ahead for performance |
-| `block_swap_debug` | BOOLEAN | False | Enable debug logging |
-
-**Output:** Optimized model ready for sampling.
-
----
-
-### 3. WAN BlockSwap Model Loader ⚠️ **(Experimental - DO NOT USE)**
-
-**Category:** `ComfyUI_Wan22Blockswap`
-
-> [!CAUTION]
-> **This node is experimental and should not be used yet!** It has known issues with block cleanup that can cause CUDA/Torch errors after generation.
-
-A combined loader + BlockSwap node that routes blocks directly during weight loading. The goal is to prevent VRAM spikes by never loading swap blocks to GPU memory.
-
-**Status:** Under active development. Use the separate **WAN Model Loader** + **WAN 2.2 BlockSwap** nodes instead.
-
----
-
-### 4. WAN22 BlockSwap Looper Models ✅ **(For WanVideoLooper)**
-
-**Category:** `ComfyUI_Wan22Blockswap/looper`
-
-Apply BlockSwap to high/low noise model pairs for WanVideoLooper integration. This node prepares both models with proper session tracking for multi-loop video generation.
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model_high` | MODEL | - | High-noise model for WanVideoLooper |
-| `model_low` | MODEL | - | Low-noise model for WanVideoLooper |
-| `blocks_to_swap` | INT | 20 | Blocks to swap to CPU |
-| `offload_txt_emb` | BOOLEAN | False | Offload text embeddings |
-| `offload_img_emb` | BOOLEAN | False | Offload image embeddings |
-| `use_non_blocking` | BOOLEAN | False | Non-blocking transfers |
-| `vace_blocks_to_swap` | INT | 0 | VACE blocks to swap |
-| `prefetch_blocks` | INT | 0 | Prefetch blocks |
-| `block_swap_debug` | BOOLEAN | False | Debug logging |
-
-**Outputs:** `model_high`, `model_low` - Connect directly to WanVideoLooper's model inputs.
-
----
-
-### 5. WAN22 BlockSwap Sequencer ✅ **(For WanVideoLoraSequencer)**
-
-**Category:** `ComfyUI_Wan22Blockswap/looper`
-
-Apply BlockSwap to WanVideoLoraSequencer output for per-segment BlockSwap with different LoRAs. Takes a list of (model_high, model_low, clip) tuples and applies BlockSwap to each model.
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model_clip_sequence` | ANY | - | Output from WanVideoLoraSequencer |
-| `blocks_to_swap` | INT | 20 | Blocks to swap to CPU |
-| `offload_txt_emb` | BOOLEAN | False | Offload text embeddings |
-| `offload_img_emb` | BOOLEAN | False | Offload image embeddings |
-| `use_non_blocking` | BOOLEAN | False | Non-blocking transfers |
-| `vace_blocks_to_swap` | INT | 0 | VACE blocks to swap |
-| `prefetch_blocks` | INT | 0 | Prefetch blocks |
-| `block_swap_debug` | BOOLEAN | False | Debug logging |
-
-**Output:** `model_clip_sequence` - Connect to WanVideoLooper's model_clip_sequence input.
-
-**Workflow:**
-1. Load models with WAN Model Loader
-2. Use WanVideoLoraSequencer to assign per-segment LoRAs
-3. Connect sequencer output to this node
-4. Connect this node's output to WanVideoLooper
-
----
-
-        
-
-# 🎯 Usage
-
-### Basic Usage
-
-1. Load your WAN model in ComfyUI
-2. Add the "WAN 2.2 BlockSwap" node to your workflow
-3. Connect your model to the BlockSwap node
-4. Configure the parameters based on your VRAM requirements
-5. Connect the output to your next node
-
-### Example Workflow
-
-```python
-# Basic setup for VRAM optimization
-model = load_model("wan_2.1_model.safetensors")
-optimized_model = wan22BlockSwap(
-    model=model,
-    blocks_to_swap=20,           # Swap 20 blocks to CPU
-    offload_txt_emb=True,        # Offload text embeddings
-    offload_img_emb=False,       # Keep image embeddings on GPU
-    use_non_blocking=True,       # Faster transfers
-    block_swap_debug=True        # Enable monitoring
-)
+```
+[GGUF Loader] → model_high ─┐
+                            ├─→ [Combo Patcher] → model_high → [Integrated KSampler / WanVideoLooper]
+[GGUF Loader] → model_low ──┘   model_low    ────────────────────────────────────────────────────────┘
+                                                                                                      ↓
+[Full Cleanup] ←──────────────────────────────────────────────────────────── images/latent/filenames ─┘
 ```
 
-        
+### How It Works
 
-## ⚙️ Parameters
+1. **Combo Patcher** receives both HIGH and LOW noise models
+2. Positions HIGH noise blocks on GPU (28) and CPU (12)
+3. Moves ALL LOW noise blocks to CPU (waiting)
+4. Patches forward methods for dynamic block swapping
+5. Registers ON_CLEANUP callback on HIGH noise model
+6. When HIGH noise sampling completes → callback positions LOW noise blocks
+7. LOW noise samples with its blocks properly positioned
+8. **Full Cleanup** frees all memory at workflow end
 
-### Required Parameters
+---
 
-| Parameter         | Type    | Default | Description                                      |
-| ----------------- | ------- | ------- | ------------------------------------------------ |
-| `model`           | MODEL   | -       | ComfyUI native WAN model (WAN 2.1/2.2 etc.)      |
-| `blocks_to_swap`  | INT     | 20      | Number of transformer blocks to swap to CPU      |
-| `offload_txt_emb` | BOOLEAN | False   | Offload text embeddings to CPU (~500MB savings)  |
-| `offload_img_emb` | BOOLEAN | False   | Offload image embeddings to CPU (~200MB savings) |
+## ⚙️ Node Parameters
 
-### Optional Parameters
+### WAN 2.2 BlockSwap Combo Patcher
 
-| Parameter             | Type    | Default | Description                                               |
-| --------------------- | ------- | ------- | --------------------------------------------------------- |
-| `use_non_blocking`    | BOOLEAN | False   | Use non-blocking memory transfers (faster, uses more RAM) |
-| `vace_blocks_to_swap` | INT     | 0       | VACE model blocks to swap (0=auto detection)              |
-| `prefetch_blocks`     | INT     | 0       | Prefetch N blocks ahead for performance                   |
-| `block_swap_debug`    | BOOLEAN | False   | Enable debug logging and performance monitoring           |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model_high` | MODEL | Required | High noise model (guidance distillation) |
+| `model_low` | MODEL | Required | Low noise model (guidance distillation) |
+| `blocks_to_swap` | INT | 12 | Number of blocks to offload to CPU (0-40) |
 
-### Parameter Guidelines
+### WAN 2.2 BlockSwap Patcher
 
-#### Model-Specific Recommendations
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | MODEL | Required | Any WAN model to apply BlockSwap to |
+| `blocks_to_swap` | INT | 20 | Number of blocks to offload to CPU (0-40) |
 
-**1.3B/5B Models:**
+### WAN 2.2 Full Cleanup (End)
 
--   `blocks_to_swap`: 0-30 (recommended: 15-25)
--   VRAM savings: ~100-200MB per 10 blocks
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `any_input` | ANY | Optional | Connect any output to trigger execution order |
+| `unload_models` | BOOL | True | Unload all models from GPU |
+| `free_memory` | BOOL | True | Clear node cache after workflow |
+| `clear_cuda_cache` | BOOL | True | Clear PyTorch CUDA cache |
+| `run_gc` | BOOL | True | Run Python garbage collection |
 
-**14B Models:**
+### WAN 2.2 BlockSwap Cleanup
 
--   `blocks_to_swap`: 0-40 (recommended: 25-35)
--   VRAM savings: ~150-250MB per 10 blocks
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | MODEL | Required | Model to clean up |
+| `latent` | LATENT | Optional | Latent pass-through (Integrated KSampler) |
+| `images` | IMAGE | Optional | Image pass-through (WanVideoLooper) |
+| `move_to_cpu` | BOOL | True | Move all blocks to CPU |
+| `unpatch` | BOOL | False | Remove BlockSwap patches entirely |
+| `clear_cache` | BOOL | True | Clear CUDA cache and run GC |
 
-**LongCat Models:**
-
--   `blocks_to_swap`: 0-48 (recommended: 30-40)
--   VRAM savings: ~200-300MB per 10 blocks
-
-#### Memory Optimization Strategies
-
-**For 8GB VRAM:**
-
-```python
-blocks_to_swap=25
-offload_txt_emb=True
-offload_img_emb=True
-```
-
-**For 12GB VRAM:**
-
-```python
-blocks_to_swap=15
-offload_txt_emb=True
-offload_img_emb=False
-```
-
-**For 16GB+ VRAM:**
-
-```python
-blocks_to_swap=0  # No swapping needed
-offload_txt_emb=False
-```
-
-        
+---
 
 ## 📊 Performance
 
-### Memory Savings
+### VRAM Usage (14B GGUF Model)
 
-**📊 Based on Real Testing with 10GB GGUF Models:**
+| Configuration | VRAM Required | Notes |
+|---------------|---------------|-------|
+| No BlockSwap | ~24GB+ | OOM on 12GB cards |
+| 12 blocks swapped | ~7.2GB | Fits on 12GB with margin |
+| 20 blocks swapped | ~5.5GB | More headroom for batches |
 
-| Blocks Swapped | VRAM Savings | CPU Memory Increase | Performance Impact |
-| -------------- | ------------ | ------------------- | ------------------ |
-| 10             | ~7.7GB       | ~2GB                | Minimal            |
-| 20             | ~15.4GB      | ~4GB                | Low                |
-| 30             | ~23.1GB      | ~6GB                | Medium             |
-| 40             | ~30.8GB      | ~8GB                | Medium-High        |
+### Timing (480x640, 2 steps per model)
 
-        
+| Phase | Time |
+|-------|------|
+| HIGH noise (2 steps) | ~26s |
+| Model switch | ~1s |
+| LOW noise (3 steps) | ~25s |
+| **Total per segment** | ~52s |
 
-**💡 Key Insights:**
-
--   **Per Block Savings**: ~770MB VRAM per block swapped
--   **Efficiency**: Each swapped block moves ~200MB to CPU memory
--   **Sweet Spot**: 15-25 blocks for optimal VRAM savings vs performance balance
--   **Setup**: RTX 4080 (16GB) + 48GB RAM handles 20+ blocks efficiently for high resolution generations(720x960)
-
-### Performance Testing
-
-To measure the actual VRAM savings and performance impact for your specific setup, use the included test script:
-
-```bash
-# Test with your GGUF model
-python test_performance.py --model-path /path/to/your/model.gguf --blocks-to-swap 20
-
-# Test multiple configurations
-python test_performance.py --model-path /path/to/your/model.gguf --test-all
-```
-
-This will generate a detailed `block_swap_performance_results.json` file with:
-
--   Actual VRAM savings for your hardware configuration
--   Load time comparisons with GGUF model handling
--   CPU memory usage impact
--   Performance metrics optimized for GGUF quantized models
-
-**GGUF Model Considerations:**
-
--   GGUF quantization affects memory allocation patterns - test script accounts for this
--   CPU RAM availability is crucial for GGUF model swapping
--   Results will vary based on your specific hardware and model size
-
-### Performance Optimization Tips
-
-1. **Start Conservative**: Begin with fewer blocks and increase gradually
-2. **Monitor Performance**: Use `block_swap_debug=True` to monitor impact
-3. **Use Prefetching**: Set `prefetch_blocks=1` for optimal performance
-4. **Non-Blocking Transfers**: Enable `use_non_blocking=True` for faster transfers
-
-### Debug Mode Output
-
-When `block_swap_debug=True`, you'll see detailed information:
+### Block Transfer Times (typical)
 
 ```
-[BlockSwap] GGUF model detected - using LAZY LOADING with safe swapping
-[BlockSwap] Total blocks: 48
-[BlockSwap] Keeping on GPU: blocks 0-27
-[BlockSwap] Offloading to CPU: blocks 28-47
-[BlockSwap] GPU blocks: 28
-[BlockSwap] CPU blocks: 20
-[BlockSwap] Peak VRAM usage should be MUCH lower!
+Block 28: transfer_time=0.10s, compute_time=0.21s, to_cpu_transfer_time=0.10s
 ```
 
-        
+- **Transfer to GPU**: ~70-100ms per block
+- **Compute**: ~200-300ms per block  
+- **Transfer to CPU**: ~100-130ms per block
 
-## 🔧 Compatibility
+---
 
-### Supported Models
+## 🔧 Technical Details
 
--   **WAN 2.1 Models**: Full support with lazy loading
--   **WAN 2.2 Models**: Full support with lazy loading
--   **GGUF Quantized Models**: Best-effort support with safe swapping
--   **VACE Models**: Optional block swapping support
+### Forward Patching Strategy
 
-### System Requirements
+The BlockSwap patcher wraps the model's forward method:
 
--   **Python**: 3.8+
--   **PyTorch**: 1.12+ with CUDA support
--   **ComfyUI**: Latest version recommended
--   **GPU**: CUDA-compatible (NVIDIA) or CPU-only mode
+```python
+def patched_forward(*args, **kwargs):
+    for block in swapped_blocks:
+        # Move block to GPU
+        block.to(gpu_device, non_blocking=True)
+        torch.cuda.synchronize()
+        
+    # Execute original forward
+    result = original_forward(*args, **kwargs)
+    
+    for block in swapped_blocks:
+        # Move block back to CPU
+        block.to(cpu_device, non_blocking=True)
+    
+    return result
+```
 
-### Platform Support
+### GGUF Lazy Loading
 
--   ✅ Windows 10/11
--   ✅ Linux (Ubuntu 18.04+, CentOS 7+)
--   ✅ macOS (Apple Silicon with MPS support)
+The lazy loader intercepts ComfyUI's model loading to prevent VRAM spikes:
 
-        
+1. **Hook Installation**: Patches GGUF loader's `load_torch_file`
+2. **Block Detection**: Identifies transformer blocks during load
+3. **Direct Routing**: Loads blocks directly to CPU/GPU based on swap config
+4. **Zero Spike**: Never loads all blocks to GPU simultaneously
+
+### ON_CLEANUP Callbacks
+
+ComfyUI's `add_object_patch` with `"ON_CLEANUP"` key triggers after sampling:
+
+```python
+model_high.add_object_patch("ON_CLEANUP", switch_to_low_noise_callback)
+```
+
+This enables automatic HIGH→LOW model switching without manual intervention.
+
+---
 
 ## 🏗️ Architecture
 
-### Modular Design
+### File Structure
 
-The project is organized into 6 focused modules:
-
-1. **`config.py`** - Parameter validation and model configuration
-2. **`block_manager.py`** - Core block swapping logic and state tracking
-3. **`callbacks.py`** - Lazy loading and cleanup callback functions
-4. **`utils.py`** - Utility functions for memory management
-5. **`nodes.py`** - Main ComfyUI node interface
-6. **`__init__.py`** - Module initialization and exports
-
-### Lazy Loading Strategy
-
-The lazy loading approach works in 4 phases:
-
-1. **Detection**: Identify model type (GGUF vs native) and capabilities
-2. **Calculation**: Determine which blocks to swap based on user parameters
-3. **Execution**: Load blocks directly to target devices during model loading
-4. **Cleanup**: Proper cleanup and memory management when model is unloaded
-
-### Memory Management
-
--   **Smart Swapping**: Only swap blocks that provide meaningful VRAM savings
--   **Automatic Cleanup**: Clean up swapped blocks when models are unloaded
--   **Device Synchronization**: Proper GPU synchronization to prevent race conditions
--   **Error Handling**: Graceful handling of memory allocation failures
-
-        
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes
-4. Add tests for your changes
-5. Run the test suite: `python -m pytest`
-6. Commit your changes: `git commit -m 'Add amazing feature'`
-7. Push to the branch: `git push origin feature/amazing-feature`
-8. Open a Pull Request
-
-### Code Style
-
-We follow PEP 8 standards and use Black for code formatting. Please ensure your code passes:
-
-```bash
-black .
-flake8 .
+```
+ComfyUI_Wan22Blockswap/
+├── __init__.py           # Node registration (active nodes only)
+├── blockswap_forward.py  # Main implementation (~1600 lines)
+│   ├── BlockSwapForwardPatcher    # Core patching logic
+│   ├── WAN22BlockSwapPatcher      # Single model patcher node
+│   ├── WAN22BlockSwapComboPatcher # HIGH+LOW combo patcher node
+│   ├── WAN22BlockSwapCleanup      # Cleanup node
+│   ├── WAN22BlockSwapReposition   # Reposition node
+│   └── WAN22FullCleanup           # End-of-workflow cleanup node
+├── wan_loader.py         # Simple WAN model loader
+├── block_manager.py      # Block management utilities
+├── callbacks.py          # Lazy load and cleanup callbacks
+├── utils.py              # Utility functions
+├── config.py             # Configuration and constants
+│
+├── # DEPRECATED (code preserved, nodes disabled):
+├── nodes.py              # Old callback-based nodes
+├── blockswap_loader.py   # Old integrated loader
+├── blockswap_looper.py   # Old looper integration
+└── blockswap_meta_loader.py  # Old meta loader
 ```
 
-        
+### Key Classes
+
+| Class | Purpose |
+|-------|---------|
+| `BlockSwapForwardPatcher` | Core logic for patching forward methods |
+| `BlockManager` | Manages block state and device placement |
+| `BlockSwapTracker` | Tracks which blocks are swapped for cleanup |
+
+---
+
+## 🔄 Workflow Examples
+
+### Example 1: Integrated KSampler (Simple)
+
+```
+[GGUF Loader High] ──┐
+                     ├──→ [Combo Patcher] → model_high/low → [Integrated KSampler]
+[GGUF Loader Low] ───┘                                              ↓
+                                                               [VAE Decode]
+[Full Cleanup] ← filenames ← [Video Combine] ← images ──────────────┘
+```
+
+### Example 2: WanVideoLooper (Multi-loop)
+
+```
+[GGUF Loader High] ──┐
+                     ├──→ [Combo Patcher] → model_high/low → [WanVideoLooper]
+[GGUF Loader Low] ───┘                                              ↓
+                                                                  images
+[Full Cleanup] ← filenames ← [Video Combine] ←──────────────────────┘
+```
+
+### Example 3: Single Model (No Guidance Distillation)
+
+```
+[GGUF Loader] → [BlockSwap Patcher] → model → [KSampler] → [VAE Decode]
+                                                                  ↓
+[Full Cleanup] ←──────────────────────────────────────────── images
+```
+
+---
+
+## ❓ FAQ
+
+### Q: Can I use this with GGUF models?
+**A:** Yes! The system includes a lazy loader specifically designed for GGUF models that prevents VRAM spikes during loading.
+
+### Q: What's the difference between Patcher and Combo Patcher?
+**A:** 
+- **Patcher**: For single models (e.g., standard WAN 2.1 workflows)
+- **Combo Patcher**: For guidance distillation with HIGH+LOW model pairs (automatic switching)
+
+### Q: Why do I see "Tried to unpin tensor not pinned by ComfyUI"?
+**A:** This is harmless. It occurs when ComfyUI tries to unpin tensors that BlockSwap already moved. Doesn't affect functionality.
+
+### Q: How many blocks should I swap?
+**A:** 
+- **12GB VRAM**: Start with 12 blocks
+- **16GB VRAM**: 8-10 blocks for faster inference
+- **24GB+ VRAM**: May not need BlockSwap at all
+
+### Q: Do I need the cleanup nodes?
+**A:** 
+- **Full Cleanup**: Recommended at end of workflow to free VRAM for next run
+- **BlockSwap Cleanup**: Optional, useful between multiple sampling runs in same workflow
+
+---
+
+## 📝 Changelog
+
+### v1.0.0 (Current)
+
+- ✅ **Forward Patching**: New approach that patches model forward methods
+- ✅ **Combo Patcher**: Automatic HIGH→LOW model switching
+- ✅ **ON_CLEANUP Callbacks**: Automatic model switching after sampling
+- ✅ **GGUF Lazy Loader**: Prevents VRAM spikes during model loading
+- ✅ **Full Cleanup Node**: Aggressive end-of-workflow cleanup
+- ✅ **WanVideoLooper Support**: Works with multi-loop workflows
+- 🗑️ **Deprecated**: Old callback-based nodes (code preserved)
+
+### v0.x (Previous)
+
+- Initial development with ON_LOAD callback approach
+- Various experimental loaders and patchers
+
+---
+
+## 🙏 Acknowledgments
+
+- **[ComfyUI-wanBlockswap](https://github.com/orssorbit/ComfyUI-wanBlockswap)** - Original block swapping implementation
+- **[ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)** - WAN 2.2 wrapper and techniques
+- **[ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)** - GGUF model support
+- **Claude Opus** - AI pair programming assistance
+
+---
 
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-        
-
-## 🙏 Acknowledgments
-
-This project builds upon the excellent work of the following projects and communities:
-
--   **[ComfyUI-wanBlockswap](https://github.com/orssorbit/ComfyUI-wanBlockswap)** - Original block swapping implementation that served as the foundation for this project
--   **[ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)** - Source of block swapping techniques and implementation insights for WAN 2.2 models
--   The ComfyUI team for creating an amazing platform
--   The WAN model developers for their excellent work
--   The GGUF community for their quantization efforts
--   All contributors and testers who helped improve this project
-
-        
+---
 
 ## 📞 Support
 
-If you encounter issues or have questions:
+If you encounter issues:
 
-1. Check the [FAQ](#faq) section below
+1. Check this README and FAQ
 2. Search existing [Issues](https://github.com/crmbz0r/ComfyUI-Wan22Blockswap/issues)
-3. Create a new issue with detailed information
-4. Join our Discord community (link in repository)
-
-        
-
-## ❓ FAQ
-
-### Q: Can I use this with GGUF models?
-
-**A:** Yes! The system automatically detects GGUF models and uses safe swapping techniques that work with quantized models.
-
-### Q: Will this affect my model's performance?
-
-**A:** The performance impact is minimal to low, depending on your configuration. Using `prefetch_blocks=1` and `use_non_blocking=True` can help minimize any performance impact. When swapping 30 blocks while generating a 720x960 video,it will be way slower, but also a lot less vram usage.
-
-### Q: How do I know how many blocks to swap?
-
-**A:** Start with conservative values (10-15 blocks) and monitor your VRAM usage. Gradually increase until you reach your desired VRAM savings while maintaining acceptable performance.
-
-### Q: What happens if I run out of CPU RAM?
-
-**A:** The system will gracefully handle memory allocation failures and skip swapping blocks that can't be allocated, falling back to GPU memory.
-
-        
-
-## 🔄 Changelog
-
-### v0.0.1 (Current)
-
--   Initial release with full lazy loading support
--   GGUF model compatibility
--   VACE model support
--   Comprehensive debug logging
--   Modular architecture
--   WanVideoLooper support (hopefully bug-free)
-
----
+3. Create a new issue with:
+   - ComfyUI version
+   - GPU model and VRAM
+   - Full error traceback
+   - Workflow description

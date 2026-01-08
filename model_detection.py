@@ -133,7 +133,11 @@ def detect_wan_config(
     
     # Detect/set WAN version
     if wan_version == "auto":
-        config["wan_version"] = _detect_wan_version(state_dict_keys, config, key_prefix, state_dict)
+        detected_version = _detect_wan_version(state_dict_keys, config, key_prefix, state_dict)
+        # Ensure version is never None - default to 2.2 for safety
+        config["wan_version"] = detected_version if detected_version is not None else "2.2"
+        if detected_version is None:
+            logger.warning("Version detection returned None, defaulting to 2.2")
     else:
         config["wan_version"] = wan_version
     
@@ -330,22 +334,40 @@ def _detect_variant(
         return "animate"
     
     # Now distinguish between I2V and T2V
+    # Different detection logic for WAN 2.1 vs 2.2:
+    # - WAN 2.1 I2V: Has img_emb AND k_img/v_img keys, in_dim=36
+    # - WAN 2.2 I2V: No img_emb or k_img/v_img, but in_dim=36 (T2V uses in_dim=16)
+    
     # WAN 2.1 I2V has img_emb keys
     if has_img_emb:
-        logger.info("Detected variant: i2v (has img_emb)")
+        logger.info("Detected variant: i2v (WAN 2.1 - has img_emb)")
         return "i2v"
     
-    # WAN 2.2 I2V doesn't have img_emb but has larger in_dim
-    # T2V has in_dim=16, I2V has in_dim=36
+    # Check for k_img/v_img in cross-attention (WAN 2.1 I2V architectural markers)
+    k_img_key = f"{key_prefix}blocks.0.cross_attn.k_img.weight"
+    v_img_key = f"{key_prefix}blocks.0.cross_attn.v_img.weight"
+    has_k_img = any(k_img_key in key for key in state_dict_keys)
+    has_v_img = any(v_img_key in key for key in state_dict_keys)
+    
+    if has_k_img and has_v_img:
+        logger.info("Detected variant: i2v (WAN 2.1 - has k_img/v_img in cross-attention)")
+        return "i2v"
+    
+    # For WAN 2.2: Check in_dim to distinguish I2V from T2V
+    # WAN 2.2 T2V: in_dim=16
+    # WAN 2.2 I2V: in_dim=36 (without k_img/v_img keys)
     if state_dict is not None:
         patch_key = f"{key_prefix}patch_embedding.weight"
         if patch_key in state_dict:
             in_dim = _get_tensor_shape(state_dict[patch_key])[1]
             if in_dim > 16:
-                # in_dim > 16 indicates I2V (image conditioning channels)
-                # 36 = 16 (latent) + 20 (image conditioning)
-                logger.info(f"Detected variant: i2v (in_dim={in_dim} > 16)")
+                # WAN 2.2 I2V uses in_dim=36 without img_emb or k_img/v_img
+                logger.info(f"Detected variant: i2v (WAN 2.2 - in_dim={in_dim} without k_img/v_img)")
                 return "i2v"
+            else:
+                # in_dim=16 is T2V
+                logger.info(f"Detected variant: t2v (in_dim={in_dim})")
+                return "t2v"
     
     # Default to t2v (text-to-video)
     logger.info("No variant-specific keys found, assuming t2v")
@@ -392,12 +414,32 @@ def _detect_wan_version(
     if variant == "i2v":
         if has_img_emb or has_k_img:
             # WAN 2.1 I2V has img_emb and k_img/v_img attention keys
+            logger.info("WAN version: 2.1 (I2V with img_emb or k_img keys)")
             return "2.1"
         else:
             # WAN 2.2 I2V uses larger in_dim without img_emb or k_img
+            logger.info("WAN version: 2.2 (I2V without img_emb or k_img keys)")
             return "2.2"
     
-    # For T2V and other variants, check bias tensor dtype
+    # For T2V and other variants, check for WAN 2.2 architectural markers
+    # WAN 2.2 uses only norm3, WAN 2.1 uses norm1+norm2+norm3
+    norm1_key = f"{key_prefix}blocks.0.norm1.weight"
+    norm3_key = f"{key_prefix}blocks.0.norm3.weight"
+    has_norm1 = any(norm1_key in key for key in state_dict_keys)
+    has_norm3 = any(norm3_key in key for key in state_dict_keys)
+    
+    logger.debug(f"Version detection: has_norm1={has_norm1}, has_norm3={has_norm3}")
+    
+    if has_norm3 and not has_norm1:
+        # WAN 2.2: Only has norm3 (single norm layer)
+        logger.info("WAN version: 2.2 (only has norm3, no norm1/norm2)")
+        return "2.2"
+    elif has_norm1:
+        # WAN 2.1: Has norm1/norm2/norm3
+        logger.info("WAN version: 2.1 (has norm1/norm2/norm3)")
+        return "2.1"
+    
+    # Fallback: Check bias tensor dtype
     # WAN 2.1 uses F32 for biases, WAN 2.2 uses F16
     if state_dict is not None:
         bias_key = f"{key_prefix}patch_embedding.bias"
@@ -422,8 +464,9 @@ def _detect_wan_version(
                 elif dtype == torch.float16:
                     return "2.2"
     
-    # Default to 2.1 for unknown cases
-    return "2.1"
+    # Final fallback: Default to 2.2 for unknown cases (safer for modern models)
+    logger.warning("Could not detect WAN version definitively, defaulting to 2.2")
+    return "2.2"
 
 
 def get_model_class_for_config(config: Dict[str, Any]):

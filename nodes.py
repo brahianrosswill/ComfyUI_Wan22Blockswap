@@ -5,6 +5,7 @@ It provides a clean interface to the block swapping functionality while
 handling all the complex callback registration and parameter management.
 """
 
+import torch
 import comfy.model_management as mm
 from comfy.patcher_extension import CallbacksMP
 from comfy.model_patcher import ModelPatcher
@@ -162,11 +163,233 @@ class WanVideo22BlockSwap:
         return (model_copy,)
 
 
+class WANBlockSwapWrapper:
+    """
+    Wrapper node that adds block swapping to ANY model's forward pass.
+    
+    This node wraps a model's forward() method to enable block swapping
+    during inference, making it compatible with ANY KSampler including
+    WanVideoLooper and other custom sampling nodes.
+    
+    Works by:
+    1. Moving specified blocks to CPU after model loads
+    2. Wrapping forward() to temporarily move blocks to GPU during inference
+    3. Moving blocks back to CPU after each forward pass
+    
+    Compatible with ALL samplers - no custom sampler needed!
+    """
+    
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "blocks_to_swap": ("INT", {
+                    "default": 12,
+                    "min": 0,
+                    "max": 48,
+                    "step": 1,
+                    "display": "slider",
+                }),
+                "offload_txt_emb": ("BOOLEAN", {"default": False}),
+                "offload_img_emb": ("BOOLEAN", {"default": False}),
+                "use_non_blocking": ("BOOLEAN", {"default": True}),
+                "enable_debug": ("BOOLEAN", {"default": False}),
+            }
+        }
+    
+    RETURN_TYPES: tuple = ("MODEL",)
+    RETURN_NAMES: tuple = ("model",)
+    CATEGORY: str = "ComfyUI_Wan22Blockswap"
+    FUNCTION: str = "wrap_model"
+    DESCRIPTION: str = (
+        "Wraps model's forward pass with block swapping logic. "
+        "Compatible with ANY KSampler including WanVideoLooper. "
+        "Offloads transformer blocks to CPU and loads them on-demand during inference."
+    )
+    
+    def wrap_model(
+        self,
+        model: ModelPatcher,
+        blocks_to_swap: int,
+        offload_txt_emb: bool,
+        offload_img_emb: bool,
+        use_non_blocking: bool,
+        enable_debug: bool,
+    ) -> tuple:
+        """
+        Wrap the model's forward pass with block swapping logic.
+        
+        Args:
+            model: ComfyUI model patcher
+            blocks_to_swap: Number of blocks from end to swap to CPU
+            offload_txt_emb: Offload text embeddings to CPU
+            offload_img_emb: Offload image embeddings to CPU
+            use_non_blocking: Use non-blocking GPU transfers
+            enable_debug: Print debug information
+            
+        Returns:
+            Wrapped model with block swapping enabled
+        """
+        if blocks_to_swap == 0:
+            if enable_debug:
+                print("[BlockSwapWrapper] blocks_to_swap=0, returning model unchanged")
+            return (model,)
+        
+        # Validate model structure
+        if not hasattr(model, 'model') or not hasattr(model.model, 'diffusion_model'):
+            raise ValueError("[BlockSwapWrapper] Not a valid diffusion model - missing model.diffusion_model")
+        
+        transformer = model.model.diffusion_model
+        
+        if not hasattr(transformer, 'blocks'):
+            raise ValueError("[BlockSwapWrapper] Model doesn't have 'blocks' attribute - not a WAN model?")
+        
+        total_blocks = len(transformer.blocks)
+        if blocks_to_swap > total_blocks:
+            if enable_debug:
+                print(f"[BlockSwapWrapper] WARNING: blocks_to_swap ({blocks_to_swap}) > total_blocks ({total_blocks})")
+                print(f"[BlockSwapWrapper] Clamping to {total_blocks}")
+            blocks_to_swap = total_blocks
+        
+        swap_start_idx = total_blocks - blocks_to_swap
+        
+        if enable_debug:
+            print(f"[BlockSwapWrapper] Model has {total_blocks} blocks")
+            print(f"[BlockSwapWrapper] Will swap blocks {swap_start_idx}-{total_blocks-1} to CPU")
+        
+        # Clone model to avoid modifying original
+        model_copy = model.clone()
+        
+        # Function to setup block swapping (called after model is loaded to GPU)
+        def setup_blockswap_wrapper(
+            patcher: ModelPatcher,
+            device_to,
+            lowvram_model_memory,
+            force_patch_weights,
+            full_load,
+        ):
+            """Setup block swapping after model is loaded."""
+            nonlocal blocks_to_swap, swap_start_idx, offload_txt_emb, offload_img_emb
+            
+            transformer = patcher.model.diffusion_model
+            
+            # Check if already wrapped
+            if hasattr(transformer, '_blockswap_wrapped'):
+                if enable_debug:
+                    print("[BlockSwapWrapper] Model already wrapped, skipping")
+                return
+            
+            if enable_debug:
+                print(f"[BlockSwapWrapper] Setting up block swap on device: {device_to}")
+            
+            # Move blocks to CPU
+            for i in range(swap_start_idx, len(transformer.blocks)):
+                transformer.blocks[i].to('cpu', non_blocking=use_non_blocking)
+                if enable_debug:
+                    print(f"[BlockSwapWrapper] Moved block {i} to CPU")
+            
+            # Optionally offload embeddings
+            if offload_txt_emb and hasattr(transformer, 'txt_in'):
+                transformer.txt_in.to('cpu')
+                if enable_debug:
+                    print("[BlockSwapWrapper] Offloaded text embeddings to CPU")
+            
+            if offload_img_emb and hasattr(transformer, 'img_in'):
+                transformer.img_in.to('cpu')
+                if enable_debug:
+                    print("[BlockSwapWrapper] Offloaded image embeddings to CPU")
+            
+            # Wrap forward method
+            if not hasattr(transformer, '_original_forward'):
+                transformer._original_forward = transformer.forward
+                
+                def forward_with_blockswap(*args, **kwargs):
+                    """Forward pass with block swapping."""
+                    # Determine target device
+                    target_device = device_to if device_to is not None else 'cuda'
+                    
+                    if enable_debug:
+                        print(f"[BlockSwapWrapper] Forward pass - moving {blocks_to_swap} blocks to {target_device}")
+                    
+                    # Move swapped blocks to GPU
+                    for i in range(swap_start_idx, len(transformer.blocks)):
+                        transformer.blocks[i].to(target_device, non_blocking=use_non_blocking)
+                    
+                    # Move embeddings if needed
+                    if offload_txt_emb and hasattr(transformer, 'txt_in'):
+                        transformer.txt_in.to(target_device, non_blocking=use_non_blocking)
+                    if offload_img_emb and hasattr(transformer, 'img_in'):
+                        transformer.img_in.to(target_device, non_blocking=use_non_blocking)
+                    
+                    # Wait for transfers if non-blocking
+                    if use_non_blocking:
+                        torch.cuda.synchronize()
+                    
+                    try:
+                        # Execute original forward
+                        result = transformer._original_forward(*args, **kwargs)
+                    finally:
+                        # Move blocks back to CPU
+                        for i in range(swap_start_idx, len(transformer.blocks)):
+                            transformer.blocks[i].to('cpu', non_blocking=use_non_blocking)
+                        
+                        # Move embeddings back
+                        if offload_txt_emb and hasattr(transformer, 'txt_in'):
+                            transformer.txt_in.to('cpu', non_blocking=use_non_blocking)
+                        if offload_img_emb and hasattr(transformer, 'img_in'):
+                            transformer.img_in.to('cpu', non_blocking=use_non_blocking)
+                        
+                        if enable_debug:
+                            print(f"[BlockSwapWrapper] Forward pass complete - blocks back on CPU")
+                    
+                    return result
+                
+                transformer.forward = forward_with_blockswap
+                transformer._blockswap_wrapped = True
+                
+                if enable_debug:
+                    print("[BlockSwapWrapper] Forward method wrapped successfully")
+        
+        # Cleanup function to restore original forward
+        def cleanup_blockswap_wrapper(patcher: ModelPatcher):
+            """Cleanup: restore original forward and move blocks back to CPU."""
+            transformer = patcher.model.diffusion_model
+            
+            if hasattr(transformer, '_original_forward'):
+                transformer.forward = transformer._original_forward
+                delattr(transformer, '_original_forward')
+                if enable_debug:
+                    print("[BlockSwapWrapper] Restored original forward method")
+            
+            if hasattr(transformer, '_blockswap_wrapped'):
+                delattr(transformer, '_blockswap_wrapped')
+            
+            # Ensure blocks are on CPU
+            for i in range(swap_start_idx, len(transformer.blocks)):
+                if transformer.blocks[i].device.type != 'cpu':
+                    transformer.blocks[i].to('cpu')
+            
+            if enable_debug:
+                print("[BlockSwapWrapper] Cleanup complete")
+        
+        # Register callbacks
+        model_copy.add_callback(CallbacksMP.ON_LOAD, setup_blockswap_wrapper)
+        model_copy.add_callback(CallbacksMP.ON_CLEANUP, cleanup_blockswap_wrapper)
+        
+        if enable_debug:
+            print("[BlockSwapWrapper] Callbacks registered")
+        
+        return (model_copy,)
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "wan22BlockSwap": WanVideo22BlockSwap,
+    "WANBlockSwapWrapper": WANBlockSwapWrapper,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "wan22BlockSwap": "WAN 2.2 BlockSwap (Lazy Load + GGUF Safe)",
+    "WANBlockSwapWrapper": "WAN BlockSwap Wrapper (Universal)",
 }

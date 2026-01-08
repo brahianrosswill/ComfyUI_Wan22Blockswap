@@ -494,14 +494,31 @@ class LazyModelPatcher:
         'load_device', 'offload_device', 'current_device', 'model_dtype',
         'patches', 'object_patches', 'object_patches_backup',
         'weight_inplace_update', 'model_lowvram', 'lowvram_patch_counter',
-        'attachments',
+        'attachments', 'get_model_object',  # Added to avoid premature loading
+    }
+    
+    # Model attributes that should trigger loading when accessed
+    # These are used during sampling, not just setup
+    _MODEL_SAMPLING_ATTRS = {
+        'latent_format',  # Accessed by fix_empty_latent_channels before sampling
+    }
+    
+    # Methods that can be called WITHOUT loading (setup/configuration methods)
+    _SAFE_METHODS = {
+        'add_object_patch',  # Used by _apply_sigma_shift - stores patches for later
+        'set_model_unet_function_wrapper',  # Wrapper setup
     }
     
     # Methods that trigger actual loading (inference-related)
     _LOAD_TRIGGERS = {
         'patch_model', 'unpatch_model', 'patch_model_lowvram', 
-        'calculate_weight', 'clone', 'add_patches', 'get_key_patches',
-        'model_state_dict', 'add_callback',
+        'calculate_weight', 'add_patches', 'get_key_patches',
+        'model_state_dict', 'add_callback', 'apply_model',  # Added apply_model as key trigger
+    }
+    
+    # Special methods that should return self (allow chaining without loading)
+    _RETURN_SELF_METHODS = {
+        'clone', 'to',  # clone and to() should return a new lazy wrapper
     }
     
     def __init__(self, loader_func, loader_args: Dict[str, Any]):
@@ -538,6 +555,13 @@ class LazyModelPatcher:
             try:
                 patcher = self._loader_func(**self._loader_args)
                 object.__setattr__(self, '_real_patcher', patcher)
+                
+                # Apply any deferred object patches
+                attachments = object.__getattribute__(self, '_placeholder_attachments')
+                if attachments:
+                    logger.debug(f"Applying {len(attachments)} deferred object patches")
+                    for key, value in attachments.items():
+                        patcher.add_object_patch(key, value)
             finally:
                 object.__setattr__(self, '_loading', False)
         
@@ -558,17 +582,72 @@ class LazyModelPatcher:
         if real_patcher is not None:
             return getattr(real_patcher, name)
         
+        # Log ALL attribute accesses on lazy model for debugging
+        logger.debug(f"LazyModelPatcher.__getattr__('{name}') - model not loaded yet")
+        
         # ===== NOT LOADED YET - be careful about what triggers loading =====
         
         # Return placeholder values for introspection attributes
         if name in LazyModelPatcher._INTROSPECTION_ATTRS:
             if name == 'model':
-                # Return None - this is checked but not used until inference
-                return None
+                # Return a smart placeholder that triggers loading for sampling-related attributes
+                lazy_patcher_ref = self  # Capture reference to trigger loading if needed
+                
+                class PlaceholderModel:
+                    def parameters(self):
+                        # Return a single placeholder parameter with CPU device
+                        # This prevents StopIteration when WanVideoLooper calls next()
+                        placeholder_param = torch.nn.Parameter(torch.zeros(1, device='cpu', dtype=torch.float16))
+                        return iter([placeholder_param])
+                    def __repr__(self):
+                        return "LazyModel(not_loaded)"
+                    def __getattr__(self, name):
+                        # Check if this attribute access should trigger model loading
+                        if name in LazyModelPatcher._MODEL_SAMPLING_ATTRS:
+                            # This is a sampling-related attribute - trigger loading NOW
+                            logger.info(f"LazyModelPatcher: Triggering load due to access of model.{name}")
+                            real_patcher = lazy_patcher_ref._ensure_loaded(trigger_name=f"model.{name} access")
+                            if real_patcher is not None:
+                                return getattr(real_patcher.model, name)
+                            return None
+                        
+                        # For .model_config access, return a placeholder
+                        if name == 'model_config':
+                            class PlaceholderModelConfig:
+                                """Placeholder model config that returns safe defaults for all attributes."""
+                                def __init__(self):
+                                    # Common attributes accessed during setup
+                                    self.sampling_settings = {
+                                        "beta_schedule": "sqrt_linear",
+                                        "linear_start": 0.00085,
+                                        "linear_end": 0.012,
+                                    }
+                                    # Latent format with proper attributes
+                                    class PlaceholderLatentFormat:
+                                        latent_channels = 16  # WAN default
+                                        def process_in(self, latent):
+                                            return latent
+                                        def process_out(self, latent):
+                                            return latent
+                                    
+                                    self.latent_format = PlaceholderLatentFormat()
+                                    self.unet_config = {}
+                                
+                                def __getattr__(self, name):
+                                    # Return None for any unknown attributes
+                                    return None
+                            
+                            return PlaceholderModelConfig()
+                        # For other attributes, return None
+                        return None
+                return PlaceholderModel()
             elif name == 'model_options':
                 return object.__getattribute__(self, '_placeholder_model_options')
             elif name == 'attachments':
                 return object.__getattribute__(self, '_placeholder_attachments')
+            elif name == 'get_model_object':
+                # Return a function that returns None (for _apply_sigma_shift checks)
+                return lambda key: None
             elif name == 'is_clone':
                 return False
             elif name == 'model_size':
@@ -587,6 +666,32 @@ class LazyModelPatcher:
                 return 0
             else:
                 return None
+        
+        # Handle methods that should return self (clone, to)
+        if name in LazyModelPatcher._RETURN_SELF_METHODS:
+            if name == 'clone':
+                # Return self without loading - cloning a lazy loader returns another lazy loader
+                logger.debug(f"LazyModelPatcher.clone() called - returning self without loading")
+                return lambda: self
+            elif name == 'to':
+                # Return self without loading - device moves are deferred
+                return lambda *args, **kwargs: self
+        
+        # Handle safe methods that can be called without loading
+        # These store configuration for later use when model loads
+        if name in LazyModelPatcher._SAFE_METHODS:
+            # Store method calls to be replayed when model loads
+            def safe_method_wrapper(*args, **kwargs):
+                logger.debug(f"LazyModelPatcher.{name}() called - deferring until load")
+                # For now, just store in placeholder dicts
+                # When model loads, these patches will be applied during actual inference
+                if name == 'add_object_patch':
+                    # Store object patches
+                    object_patches = object.__getattribute__(self, '_placeholder_attachments')
+                    if len(args) >= 2:
+                        object_patches[args[0]] = args[1]
+                return self
+            return safe_method_wrapper
         
         # Trigger loading for inference-related methods
         if name in LazyModelPatcher._LOAD_TRIGGERS:
