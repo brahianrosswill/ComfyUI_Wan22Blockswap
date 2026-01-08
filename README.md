@@ -10,7 +10,7 @@
 
 ## 🚀 Overview
 
-**ComfyUI-Wan22Blockswap** enables running WAN 2.1/2.2 14B GGUF models on 12GB VRAM GPUs by dynamically swapping transformer blocks between GPU and CPU during inference.
+**ComfyUI_Wan22Blockswap** enables running WAN 2.1/2.2 14B GGUF models with lower VRAM usage by dynamically swapping transformer blocks between GPU and CPU during inference, allowing for generations with higher resolutions.
 
 ### Key Features
 
@@ -22,6 +22,40 @@
 - ✅ **Full Cleanup Node**: Aggressive memory cleanup at end of workflow
 
 ---
+
+## 🛠️ Installation
+
+### Method 1: Manual Installation
+
+1. Download the latest release from the [Releases page](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap/releases)
+2. Extract the contents to your ComfyUI custom nodes directory:
+    ```
+    ComfyUI/custom_nodes/ComfyUI-wan22Blockswap/
+    ```
+3. Restart ComfyUI
+
+### Method 2: Git Installation
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/yourusername/ComfyUI-Wan22Blockswap.git
+```
+
+### Method 3: Manager Installation
+
+If you're using ComfyUI Manager, search for "Wan22Blockswap" in the available nodes list and install directly.
+
+---
+
+# 🎯 Usage
+
+### Basic Usage
+
+1. Load your WAN model in ComfyUI
+2. Add the "WAN 2.2 BlockSwap" node to your workflow
+3. Connect your model to the BlockSwap node
+4. Configure the parameters based on your VRAM requirements
+5. Connect the output to your next node
 
 ## 📦 Available Nodes
 
@@ -44,13 +78,15 @@
 
 For guidance distillation workflows (HIGH noise → LOW noise models):
 
-```
-[GGUF Loader] → model_high ─┐
-                            ├─→ [Combo Patcher] → model_high → [Integrated KSampler / WanVideoLooper]
-[GGUF Loader] → model_low ──┘   model_low    ────────────────────────────────────────────────────────┘
-                                                                                                      ↓
-[Full Cleanup] ←──────────────────────────────────────────────────────────── images/latent/filenames ─┘
-```
+
+<img width="3422" height="490" alt="grafik" src="https://github.com/user-attachments/assets/a1109fb3-cc80-4e75-a123-83b2357780cf" />
+
+
+### Or the basic High / Low KSampler workflow:
+
+
+<img width="3212" height="946" alt="grafik" src="https://github.com/user-attachments/assets/231a6567-b93b-4b20-83f3-487dfcd76668" />
+
 
 ### How It Works
 
