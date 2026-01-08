@@ -81,6 +81,8 @@ For guidance distillation workflows (HIGH noise → LOW noise models):
 
 <img width="3422" height="490" alt="grafik" src="https://github.com/user-attachments/assets/a1109fb3-cc80-4e75-a123-83b2357780cf" />
 
+**Usage with the WanVideoLooper node is pretty similar, just replace the Integrated KSampler with the Looper Node and add the LoRA Sequencer if needed. I'll add an example workflow later too..**
+
 
 ### Or the basic High / Low KSampler workflow:
 
