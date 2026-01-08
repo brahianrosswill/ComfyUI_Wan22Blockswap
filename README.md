@@ -52,10 +52,10 @@ If you're using ComfyUI Manager, search for "Wan22Blockswap" in the available no
 ### Basic Usage
 
 1. Load your WAN model in ComfyUI
-2. Add the "WAN 2.2 BlockSwap" node to your workflow
-3. Connect your model to the BlockSwap node
+2. Add the "WAN 2.2 BlockSwap Patcher" node to your workflow
+3. Connect your model to the BlockSwap Patcher node
 4. Configure the parameters based on your VRAM requirements
-5. Connect the output to your next node
+5. Connect the output directly to the KSampler of your choice, I'd recommend to connect it directly to the KSampler without any nodes inbetween. (check workflow examples)
 
 ## 📦 Available Nodes
 
