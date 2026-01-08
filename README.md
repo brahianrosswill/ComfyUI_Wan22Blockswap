@@ -30,7 +30,7 @@
 1. Download the latest release from the [Releases page](https://github.com/crmbz0r/ComfyUI_Wan22Blockswap/releases)
 2. Extract the contents to your ComfyUI custom nodes directory:
     ```
-    ComfyUI/custom_nodes/ComfyUI-wan22Blockswap/
+    ComfyUI/custom_nodes/ComfyUI_Wan22Blockswap/
     ```
 3. Restart ComfyUI
 
@@ -38,12 +38,12 @@
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/yourusername/ComfyUI-Wan22Blockswap.git
+git clone https://github.com/crmbz0r/ComfyUI_Wan22Blockswap.git
 ```
 
 ### Method 3: Manager Installation
 
-If you're using ComfyUI Manager, search for "Wan22Blockswap" in the available nodes list and install directly.
+If you're using ComfyUI Manager, search for "Wan22Blockswap" in the available nodes list and install directly. (not yet, will add soon)
 
 ---
 
